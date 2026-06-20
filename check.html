@@ -65,6 +65,28 @@ h1{font-size:15px;margin:0 0 2px;font-weight:700;letter-spacing:.2px;}
 .srow button{flex:1;padding:13px;border-radius:11px;border:0;font-size:14px;font-weight:800;cursor:pointer;}
 .copyb{background:var(--gold);color:#fff;} .closeb{background:#eef0f4;color:#333;}
 .tip{background:#fff7e6;border:1px solid #f0dcab;color:#7a5a14;font-size:11.5px;border-radius:9px;padding:8px 10px;margin:8px 0 0;line-height:1.45;}
+/* ===== NYC tab ===== */
+.tabbar{display:flex;background:var(--navy);padding:0 6px;position:sticky;top:0;z-index:19;border-top:1px solid rgba(255,255,255,.08);}
+.tabbtn{flex:1;background:none;border:none;color:#b9c2db;font-size:13px;font-weight:700;padding:11px 4px;cursor:pointer;border-bottom:3px solid transparent;}
+.tabbtn.on{color:#fff;border-bottom-color:var(--gold);}
+#nycview{padding:10px 10px 110px;max-width:760px;margin:0 auto;}
+.nyc-intro{background:#fff;border:1px solid var(--line);border-left:4px solid var(--gold);border-radius:10px;padding:10px 12px;font-size:12.5px;line-height:1.5;color:#2a2f3a;margin-bottom:10px;}
+.nyc-mut{color:var(--mut);}
+.nyc-counts{display:flex;gap:6px;font-size:11.5px;font-weight:700;margin-bottom:9px;flex-wrap:wrap;}
+.nyc-counts span{background:#eef0f4;color:#37506e;padding:3px 9px;border-radius:20px;}
+.nyc-counts .cv{background:#fdeccb;color:#9a6a12;} .nyc-counts .ct{background:#e3f3e9;color:#1f8a4c;}
+.nyc-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:11px 12px;margin-bottom:8px;}
+.nyc-card.done{opacity:.55;}
+.nyc-name{font-size:14.5px;font-weight:700;line-height:1.3;}
+.nyc-sub{font-size:11px;color:var(--mut);margin-top:2px;}
+.nyc-tag{font-size:10px;font-weight:800;padding:1px 6px;border-radius:6px;margin-left:4px;vertical-align:middle;}
+.nyc-tag.thq{background:#10204a;color:#fff;} .nyc-tag.tbr{background:#eef0f4;color:#5b6273;}
+.nyc-br{font-size:11px;color:#37506e;margin-top:3px;}
+.nyc-talk{font-size:12px;color:#5a4410;margin-top:6px;line-height:1.45;background:#fff6df;border:1px solid #f0e0a8;border-radius:8px;padding:6px 8px;}
+.nyc-chk{display:flex;gap:7px;margin-top:8px;}
+.nyc-b{flex:1;border:1.5px solid var(--line);background:#fff;color:#73798a;border-radius:9px;padding:8px 4px;font-size:12.5px;font-weight:700;cursor:pointer;}
+.nyc-b.cardb.on{background:var(--gold);border-color:var(--gold);color:#fff;}
+.nyc-b.visitb.on{background:var(--green);border-color:var(--green);color:#fff;}
 </style>
 </head>
 <body>
@@ -73,6 +95,11 @@ h1{font-size:15px;margin:0 0 2px;font-weight:700;letter-spacing:.2px;}
   <div class="sub">각 카드에 <b>작가·판매실적·한국관계·Frieze서울·메모·💬스몰토크</b> 채워둠 → 보고 <b style="color:#7fd49b">✓다녀옴</b> / <b style="color:#f0c869">★갈곳</b> 표시. 정보 부족하면 카드만 봐도 결정 OK.</div>
   <div class="counts" id="counts"></div>
 </header>
+<div class="tabbar" id="tabbar">
+  <button class="tabbtn on" data-tab="main" id="tab-main">📋 전체 체크리스트</button>
+  <button class="tabbtn" data-tab="nyc" id="tab-nyc">🗽 뉴욕 갤러리</button>
+</div>
+<div id="mainview">
 <div class="tools">
   <input id="q" placeholder="🔎 갤러리·도시·작가 검색">
   <div class="chips" id="chips"></div>
@@ -83,6 +110,8 @@ h1{font-size:15px;margin:0 0 2px;font-weight:700;letter-spacing:.2px;}
   </div>
 </div>
 <div class="wrap" id="wrap"></div>
+</div><!-- /mainview -->
+<div id="nycview" style="display:none"></div>
 
 <div class="fab"><button id="copyfab">📋 결과 복사 (다녀온 곳 + 타깃)</button></div>
 
@@ -262,6 +291,87 @@ document.querySelectorAll(".sortbtn").forEach(b=>b.onclick=()=>{
   b.classList.add("on");sortMode=b.dataset.sort;render();
 });
 render();
+
+/* ===== NYC 갤러리 탭 ===== */
+(function(){
+  var NYKEY="ab2026_nyc_v1";
+  var nyState=JSON.parse(localStorage.getItem(NYKEY)||"{}"); // {id:{c:1,n:1}}
+  function nySave(){localStorage.setItem(NYKEY,JSON.stringify(nyState));}
+  function nyGet(id){return nyState[id]||{};}
+  function esc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+  function nyType(d){
+    var city=(d.city||"").toLowerCase();
+    if(city.indexOf("new york")>-1) return "hq";
+    if(/new york|\bNY\b/i.test(d.br||"")) return "branch";
+    return null;
+  }
+  var hq=[],br=[];
+  DATA.forEach(function(d){var t=nyType(d); if(t==="hq")hq.push(d); else if(t==="branch")br.push(d);});
+  var byName=function(a,b){return a.n.localeCompare(b.n);};
+  hq.sort(byName); br.sort(byName);
+
+  var view=document.getElementById("nycview"), countbar;
+
+  function card(d,type){
+    var g=nyGet(d.id);
+    var el=document.createElement("div");
+    el.className="nyc-card"+(g.n?" done":"");
+    var founded=d.f?" · est."+esc(d.f):"";
+    var brLine=d.br?'<div class="nyc-br">🌐 지사: '+esc(d.br)+'</div>':'';
+    var talk=d.talk?'<div class="nyc-talk"><b>💬</b> '+esc(d.talk)+'</div>':'';
+    el.innerHTML=
+      '<div class="nyc-name">'+esc(d.n)+' <span class="nyc-tag '+(type==="hq"?"thq":"tbr")+'">'+(type==="hq"?"NY 본사":"NY 지사")+'</span></div>'+
+      '<div class="nyc-sub">'+esc(d.sec||"")+founded+(d.city?" · "+esc(d.city):"")+'</div>'+
+      brLine+talk+
+      '<div class="nyc-chk">'+
+        '<button class="nyc-b cardb'+(g.c?" on":"")+'" data-k="c">🪪 명함</button>'+
+        '<button class="nyc-b visitb'+(g.n?" on":"")+'" data-k="n">📍 NY 방문</button>'+
+      '</div>';
+    el.querySelectorAll(".nyc-b").forEach(function(b){
+      b.onclick=function(){
+        var k=b.dataset.k,o=nyGet(d.id); o[k]=o[k]?0:1; nyState[d.id]=o; nySave();
+        b.classList.toggle("on",!!o[k]);
+        if(k==="n") el.classList.toggle("done",!!o.n);
+        nyCounts();
+      };
+    });
+    return el;
+  }
+  function section(title,arr,type){
+    var h=document.createElement("div"); h.className="seclabel";
+    h.innerHTML=title+' <small>'+arr.length+'곳</small>';
+    view.appendChild(h);
+    arr.forEach(function(d){view.appendChild(card(d,type));});
+  }
+  function nyCounts(){
+    var cc=0,nn=0,total=hq.length+br.length;
+    Object.keys(nyState).forEach(function(id){var o=nyState[id]; if(o&&o.c)cc++; if(o&&o.n)nn++;});
+    countbar.innerHTML='<span>총 <b>'+total+'</b>곳</span><span class="cv">🪪 명함 '+cc+'</span><span class="ct">📍 방문 '+nn+'</span>';
+  }
+  (function build(){
+    view.innerHTML="";
+    var intro=document.createElement("div"); intro.className="nyc-intro";
+    intro.innerHTML='<b>🗽 뉴욕에 본사·지사가 있는 AB2026 갤러리</b><br>바젤 부스에서 인사·명함 받고 → 11월 뉴욕에서 방문. <b>🪪</b>=명함 받음, <b>📍</b>=NY 방문 완료. <span class="nyc-mut">💬 스몰토크 멘트 포함 · 데이터는 메인 295곳에서 자동 추출</span>';
+    view.appendChild(intro);
+    countbar=document.createElement("div"); countbar.className="nyc-counts"; view.appendChild(countbar);
+    section("🏛 뉴욕 본사 (HQ)",hq,"hq");
+    section("🌐 뉴욕 지사 (Branch)",br,"branch");
+    nyCounts();
+  })();
+
+  var tabMain=document.getElementById("tab-main"),tabNyc=document.getElementById("tab-nyc"),mainview=document.getElementById("mainview");
+  var fab=(document.getElementById("copyfab")||{}).parentElement;
+  function show(tab){
+    var nyc=tab==="nyc";
+    mainview.style.display=nyc?"none":"";
+    view.style.display=nyc?"":"none";
+    tabNyc.classList.toggle("on",nyc); tabMain.classList.toggle("on",!nyc);
+    if(fab) fab.style.display=nyc?"none":"";
+    window.scrollTo(0,0);
+  }
+  tabMain.onclick=function(){show("main");};
+  tabNyc.onclick=function(){show("nyc");};
+})();
 </script>
 </body>
 </html>
